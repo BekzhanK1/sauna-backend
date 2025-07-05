@@ -3,6 +3,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from .models import Booking
 from .serializers import BookingSerializer
+from .utils import generate_random_4_digit_number
 from users.permissions import IsBathAdminOrSuperAdmin
 
 
@@ -11,20 +12,27 @@ class BookingViewSet(viewsets.ModelViewSet):
     serializer_class = BookingSerializer
 
     def get_permissions(self):
-        if self.action in ["update", "partial_update", "destroy", "confirm_booking"]:
+        if self.action in [
+            "update",
+            "partial_update",
+            "destroy",
+            "confirm_booking",
+            "retrieve",
+            "confirm_booking_admin",
+        ]:
             return [IsBathAdminOrSuperAdmin()]
         return [permissions.AllowAny()]
 
     def get_queryset(self):
         user = self.request.user
+
         if user.is_authenticated and user.role == "superadmin":
             return Booking.objects.all()
+
         elif user.is_authenticated and user.role == "bath_admin":
-            return Booking.objects.filter(bathhouse__owner=user)
-        else:
-            return Booking.objects.filter(
-                sms_code=self.request.query_params.get("sms_code", "")
-            )
+            return Booking.objects.filter(bathhouse__owner_id=user.pk)
+
+        return Booking.objects.all()
 
     def list(self, request, *args, **kwargs):
         user = self.request.user
@@ -63,7 +71,6 @@ class BookingViewSet(viewsets.ModelViewSet):
         url_path="confirm-booking-sms",
     )
     def confirm_booking_sms(self, request, pk=None):
-        print(pk)
         booking = self.get_object()
         sms_code = request.query_params.get("sms_code")
         if not sms_code:
@@ -77,6 +84,57 @@ class BookingViewSet(viewsets.ModelViewSet):
             booking.save()
             return Response(
                 {"message": "Booking confirmed successfully"}, status=status.HTTP_200_OK
+            )
+        else:
+            return Response(
+                {"error": "Sms code is incorrect"}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+    @action(
+        detail=True,
+        methods=["get"],
+        permission_classes=[permissions.AllowAny],
+        url_path="request-cancel-booking-sms",
+    )
+    def request_cancel_booking_sms(self, request, pk=None):
+        booking = self.get_object()
+        if not booking.confirmed:
+            return Response(
+                {"error": "Booking is not confirmed, cannot cancel"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        sms_code = generate_random_4_digit_number()
+        booking.sms_code = sms_code
+        booking.save()
+
+        print(sms_code)
+        # Here you would typically send an SMS with a cancellation code
+        # For simplicity, we will just return a success message
+        return Response(
+            {"message": "Cancellation SMS sent successfully"}, status=status.HTTP_200_OK
+        )
+
+    @action(
+        detail=True,
+        methods=["post"],
+        permission_classes=[permissions.AllowAny],
+        url_path="cancel-booking-sms",
+    )
+    def cancel_booking_sms(self, request, pk=None):
+        print(pk)
+        booking = self.get_object()
+        sms_code = request.query_params.get("sms_code")
+        if not sms_code:
+            return Response(
+                {"error": "You have to enter sms code to cancel booking"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if sms_code == booking.sms_code:
+            booking.delete()
+            return Response(
+                {"message": "Booking cancelled successfully"}, status=status.HTTP_200_OK
             )
         else:
             return Response(

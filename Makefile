@@ -1,7 +1,7 @@
 .PHONY: runserver celery beat migrate makemigrations shell
 
 # Run Django development server
-runserver:
+run:
 	python manage.py runserver
 
 # Run Celery worker

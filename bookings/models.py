@@ -1,11 +1,15 @@
 from datetime import timedelta
 from users.models import Bathhouse, Room, ExtraItem
 from django.db import models
+import uuid
 
 CONFIRMATION_TIMEOUT_MINUTES = 10
 
 
 class Booking(models.Model):
+    id = models.UUIDField(
+        primary_key=True, default=uuid.uuid4, editable=False, unique=True
+    )
     bathhouse = models.ForeignKey(
         Bathhouse, on_delete=models.CASCADE, related_name="bookings"
     )
