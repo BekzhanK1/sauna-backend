@@ -22,7 +22,11 @@ class Bathhouse(models.Model):
     description = models.TextField(blank=True)
     address = models.CharField(max_length=255)
     owner = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="bathhouses"
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name="bathhouses",
+        null=True,
+        blank=True,
     )
     phone = models.CharField(max_length=20, blank=True)
     is_24_hours = models.BooleanField(default=False)
@@ -30,7 +34,7 @@ class Bathhouse(models.Model):
     end_of_work = models.TimeField(null=True, blank=True)
 
     def __str__(self):
-        return f"{self.name} - {self.owner.username}"
+        return f"{self.name} - {self.owner.username if self.owner else 'No Owner'}"
 
 
 class Room(models.Model):

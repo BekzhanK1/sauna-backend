@@ -69,12 +69,14 @@ class BookingSerializer(serializers.ModelSerializer):
         new_end_time = start_time + timedelta(hours=hours)
 
         # Проверяем пересечение с другими бронями в комнате
-        overlapping_bookings = Booking.objects.filter(
-            room=room, start_time__lt=new_end_time
-        ).exclude(start_time__gte=new_end_time)
+        for booking in Booking.objects.filter(room=room):
+            existing_start = booking.start_time
+            existing_end = booking.start_time + timedelta(hours=booking.hours)
 
-        if overlapping_bookings.exists():
-            raise serializers.ValidationError("Это время уже занято для этой комнаты.")
+            if start_time < existing_end and new_end_time > existing_start:
+                raise serializers.ValidationError(
+                    "Это время уже занято для этой комнаты."
+                )
 
         # Проверяем активные бронирования по телефону
         active_bookings = Booking.objects.filter(

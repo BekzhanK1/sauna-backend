@@ -1,3 +1,4 @@
+from django.utils import timezone
 from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -30,6 +31,17 @@ class BookingViewSet(viewsets.ModelViewSet):
             return Booking.objects.all()
 
         elif user.is_authenticated and user.role == "bath_admin":
+            bathhouse_id = self.request.query_params.get("bathhouse_id")
+
+            if bathhouse_id:
+                if bathhouse_id.isdigit():
+                    bathhouse_id = int(bathhouse_id)
+                    return Booking.objects.filter(
+                        bathhouse_id=bathhouse_id, bathhouse__owner_id=user.pk
+                    )
+                else:
+                    return Booking.objects.none()
+
             return Booking.objects.filter(bathhouse__owner_id=user.pk)
 
         return Booking.objects.all()
@@ -52,11 +64,34 @@ class BookingViewSet(viewsets.ModelViewSet):
 
         return super().list(request, *args, **kwargs)
 
+    def create(self, request, *args, **kwargs):
+        print(request.data)
+        return super().create(request, *args, **kwargs)
+
+    @action(
+        detail=False,
+        methods=["get"],
+        permission_classes=[permissions.AllowAny],
+        url_path="room-bookings",
+    )
+    def get_room_bookings(self, request):
+        room_id = request.query_params.get("room_id")
+        if not room_id:
+            return Response(
+                {"error": "Room ID is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        today = timezone.now().date()
+        bookings = Booking.objects.filter(room_id=room_id, start_time__gte=today)
+        serializer = self.get_serializer(bookings, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
     @action(
         detail=True,
         methods=["post"],
         permission_classes=[IsBathAdminOrSuperAdmin],
-        url_name="confirm-booking-admin",
+        url_path="confirm-booking-admin",
     )
     def confirm_booking_admin(self, request, pk=None):
         booking = self.get_object()

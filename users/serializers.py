@@ -52,10 +52,29 @@ class BathhouseSerializer(serializers.ModelSerializer):
         model = Bathhouse
         fields = "__all__"
 
+    def to_representation(self, instance):
+        representation = super().to_representation(instance)
+        representation["owner"] = (
+            {
+                "id": instance.owner.id if instance.owner else None,
+                "username": instance.owner.username if instance.owner else None,
+                "email": instance.owner.email if instance.owner else None,
+            }
+            if instance.owner
+            else None
+        )
+        return representation
+
 
 class UserSerializer(serializers.ModelSerializer):
     bathhouses = BathhouseSerializer(many=True, read_only=True)
+    password = serializers.CharField(write_only=True)
 
     class Meta:
         model = User
-        fields = ["id", "username", "email", "role", "bathhouses"]
+        fields = ["id", "username", "email", "role", "bathhouses", "password"]
+
+    def create(self, validated_data):
+        password = validated_data.pop("password")
+        user = User.objects.create_user(password=password, **validated_data)
+        return user
