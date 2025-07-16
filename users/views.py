@@ -2,9 +2,11 @@ from rest_framework import viewsets, permissions
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from .models import ExtraItem, Room, User, Bathhouse
+from .models import BathhouseItem, ExtraItem, MenuCategory, Room, User, Bathhouse
 from .serializers import (
+    BathhouseItemSerializer,
     ExtraItemSerializer,
+    MenuCategorySerializer,
     RoomSerializer,
     UserSerializer,
     BathhouseSerializer,
@@ -77,6 +79,35 @@ class RoomViewSet(viewsets.ModelViewSet):
         return queryset
 
 
+class BathhouseItemViewSet(viewsets.ModelViewSet):
+    queryset = BathhouseItem.objects.all()
+    serializer_class = BathhouseItemSerializer
+
+    def get_permissions(self):
+        if self.action in ["create"]:
+            return [IsBathAdminOrSuperAdmin()]
+        elif self.action in ["update", "partial_update", "destroy"]:
+            return [IsBathAdminOrSuperAdmin()]
+        return [permissions.AllowAny()]
+
+    def get_queryset(self):
+        user = self.request.user
+        queryset = BathhouseItem.objects.all()
+
+        if user.is_authenticated and user.role == "superadmin":
+            queryset = BathhouseItem.objects.all()
+        elif user.is_authenticated and user.role == "bath_admin":
+            queryset = BathhouseItem.objects.filter(bathhouse__owner=user)
+        else:
+            queryset = BathhouseItem.objects.filter(is_available=True)
+
+        bathhouse_id = self.request.query_params.get("bathhouse_id")
+        if bathhouse_id:
+            queryset = queryset.filter(bathhouse_id=bathhouse_id)
+
+        return queryset
+
+
 class ExtraItemViewSet(viewsets.ModelViewSet):
     queryset = ExtraItem.objects.all()
     serializer_class = ExtraItemSerializer
@@ -93,3 +124,32 @@ class ExtraItemViewSet(viewsets.ModelViewSet):
         if user.role == "superadmin":
             return ExtraItem.objects.all()
         return ExtraItem.objects.filter(bathhouse__owner=user)
+
+
+class MenuCategoryViewSet(viewsets.ModelViewSet):
+    queryset = MenuCategory.objects.all()
+    serializer_class = MenuCategorySerializer
+
+    def get_permissions(self):
+        if self.action in ["create"]:
+            return [IsBathAdminOrSuperAdmin()]
+        elif self.action in ["update", "partial_update", "destroy"]:
+            return [IsBathAdminOrSuperAdmin()]
+        return [permissions.AllowAny()]
+
+    def get_queryset(self):
+        user = self.request.user
+        queryset = MenuCategory.objects.all()
+
+        if user.is_authenticated and user.role == "superadmin":
+            queryset = MenuCategory.objects.all()
+        elif user.is_authenticated and user.role == "bath_admin":
+            queryset = MenuCategory.objects.filter(bathhouse__owner=user)
+        else:
+            queryset = MenuCategory.objects.all()
+
+        bathhouse_id = self.request.query_params.get("bathhouse_id")
+        if bathhouse_id:
+            queryset = queryset.filter(bathhouse_id=bathhouse_id)
+
+        return queryset

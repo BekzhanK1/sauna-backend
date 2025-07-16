@@ -2,7 +2,7 @@
 
 # Run Django development server
 run:
-	python manage.py runserver
+	python3 manage.py runserver
 
 # Run Celery worker
 celery:
@@ -18,12 +18,12 @@ celery_all:
 
 # Make migrations
 makemigrations:
-	python manage.py makemigrations
+	python3 manage.py makemigrations
 
 # Apply migrations
 migrate:
-	python manage.py migrate
+	python3 manage.py migrate
 
 # Open Django shell
 shell:
-	python manage.py shell
+	python3 manage.py shell

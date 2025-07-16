@@ -18,7 +18,8 @@ class Booking(models.Model):
     phone = models.CharField(max_length=20)
     start_time = models.DateTimeField()
     hours = models.PositiveIntegerField(default=1)
-    confirmed = models.BooleanField(default=False)
+    # TODO: For testing purposes, this should be set to False in production
+    confirmed = models.BooleanField(default=True)
     sms_code = models.CharField(max_length=10, blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
 

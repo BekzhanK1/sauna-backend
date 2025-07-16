@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import BathhouseItem, User, Bathhouse, Room, ExtraItem
+from .models import BathhouseItem, MenuCategory, User, Bathhouse, Room, ExtraItem
 
 
 @admin.register(User)
@@ -35,3 +35,4 @@ class RoomAdmin(admin.ModelAdmin):
 
 admin.site.register(ExtraItem)
 admin.site.register(BathhouseItem)
+admin.site.register(MenuCategory)

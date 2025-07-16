@@ -33,8 +33,8 @@ class BookingSerializer(serializers.ModelSerializer):
         if start_time < now:
             raise serializers.ValidationError("Нельзя бронировать на прошедшее время.")
 
-        # Проверяем, что нельзя бронировать более чем за 3 дня
-        max_days_ahead = 3
+        # Проверяем, что нельзя бронировать более чем за 15 дней
+        max_days_ahead = 15
         latest_allowed = now + timedelta(days=max_days_ahead)
         if start_time > latest_allowed:
             raise serializers.ValidationError(

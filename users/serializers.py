@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import ExtraItem, Room, User, Bathhouse, BathhouseItem
+from .models import ExtraItem, MenuCategory, Room, User, Bathhouse, BathhouseItem
 
 
 class ExtraItemInputSerializer(serializers.Serializer):
@@ -78,3 +78,9 @@ class UserSerializer(serializers.ModelSerializer):
         password = validated_data.pop("password")
         user = User.objects.create_user(password=password, **validated_data)
         return user
+
+
+class MenuCategorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MenuCategory
+        fields = "__all__"

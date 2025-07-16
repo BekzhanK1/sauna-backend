@@ -41,17 +41,37 @@ class Room(models.Model):
     bathhouse = models.ForeignKey(
         Bathhouse, on_delete=models.CASCADE, related_name="rooms"
     )
+    is_bathhouse = models.BooleanField(default=False)
+    is_sauna = models.BooleanField(default=False)
     room_number = models.CharField(max_length=20)
-    capacity = models.PositiveIntegerField(default=1)
+    capacity = models.CharField(max_length=50, blank=True)
     price_per_hour = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    holiday_price_per_hour = models.DecimalField(
+        max_digits=10, decimal_places=2, default=0.00
+    )
     is_available = models.BooleanField(default=True)
     has_pool = models.BooleanField(default=False)
+    has_recreation_area = models.BooleanField(default=False)
+    has_steam_room = models.BooleanField(default=False)
+    has_washing_area = models.BooleanField(default=False)
+    heated_by_wood = models.BooleanField(default=False)
+    heated_by_coal = models.BooleanField(default=False)
 
     def __str__(self):
-        return f"{self.room_number} ({self.bathhouse.name})"
+        return f"{'Bathhouse' if self.is_bathhouse else 'Sauna'} {self.room_number} ({self.bathhouse.name})"
 
     class Meta:
-        unique_together = ("bathhouse", "room_number")
+        unique_together = ("bathhouse", "room_number", "is_bathhouse", "is_sauna")
+
+
+class MenuCategory(models.Model):
+    name = models.CharField(max_length=100)
+    bathhouse = models.ForeignKey(
+        Bathhouse, on_delete=models.CASCADE, related_name="menu_categories"
+    )
+
+    def __str__(self):
+        return f"{self.name} ({self.bathhouse.name})"
 
 
 class BathhouseItem(models.Model):
@@ -61,9 +81,18 @@ class BathhouseItem(models.Model):
     name = models.CharField(max_length=100)
     description = models.TextField(blank=True)
     price = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    is_available = models.BooleanField(default=True)
+    image = models.ImageField(upload_to="bathhouse_items/", blank=True, null=True)
+    category = models.ForeignKey(
+        MenuCategory,
+        on_delete=models.SET_NULL,
+        related_name="items",
+        null=True,
+        blank=True,
+    )
 
     def __str__(self):
-        return f"{self.pk}:{self.name} ({self.bathhouse.name})"
+        return f"{self.pk}: {self.name} ({self.bathhouse.name})"
 
     class Meta:
         unique_together = ("bathhouse", "name")
@@ -79,4 +108,4 @@ class ExtraItem(models.Model):
     )
 
     def __str__(self):
-        return f"{self.pk}:{self.name} ({self.item.bathhouse.name})"
+        return f"{self.item.name} x ({self.quantity}) for Booking {self.booking.id}"
