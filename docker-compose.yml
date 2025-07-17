@@ -10,3 +10,9 @@ services:
       - "8000:8000"
     # env_file:
     #   - .env
+
+  migrate:
+    build: .
+    command: python3 manage.py migrate
+    volumes:
+      - .:/app
