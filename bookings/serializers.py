@@ -7,6 +7,7 @@ from django.utils import timezone
 from datetime import timezone as dt_timezone
 from .utils import generate_random_4_digit_number
 from .tasks import delete_unconfirmed_booking
+import pytz
 
 
 class BookingSerializer(serializers.ModelSerializer):
@@ -51,16 +52,20 @@ class BookingSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Комната не принадлежит ни одной бане.")
 
         if not bathhouse.is_24_hours:
-            work_start = bathhouse.start_of_work
-            work_end = bathhouse.end_of_work
-            booking_time = start_time.time()
+            # Convert UTC start_time to local time (UTC+5)
+            local_tz = pytz.timezone("Asia/Almaty")  # Or your specific timezone
+            local_start_time = timezone.localtime(start_time, timezone=local_tz)
+            booking_time = local_start_time.time()
+
+            work_start = bathhouse.start_of_work  # Already in local time (UTC+5)
+            work_end = bathhouse.end_of_work  # Already in local time (UTC+5)
 
             if work_start < work_end:
                 if not (work_start <= booking_time <= work_end):
                     raise serializers.ValidationError(
                         "Бронь должна быть в рабочее время бани."
                     )
-            else:
+            else:  # Overnight working hours
                 if not (booking_time >= work_start or booking_time <= work_end):
                     raise serializers.ValidationError(
                         "Бронь должна быть в рабочее время бани."
