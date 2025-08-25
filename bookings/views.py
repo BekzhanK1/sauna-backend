@@ -2,10 +2,17 @@ from django.utils import timezone
 from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
+
+from users.models import Bathhouse, Room
 from .models import Booking
 from .serializers import BookingSerializer
 from .utils import generate_random_4_digit_number
 from users.permissions import IsBathAdminOrSuperAdmin
+from users.services.telegram import send_message
+from datetime import datetime
+from zoneinfo import ZoneInfo
+import html
+from decimal import Decimal, ROUND_HALF_UP
 
 
 class BookingViewSet(viewsets.ModelViewSet):
@@ -65,8 +72,68 @@ class BookingViewSet(viewsets.ModelViewSet):
         return super().list(request, *args, **kwargs)
 
     def create(self, request, *args, **kwargs):
+        response = super().create(request, *args, **kwargs)
         print(request.data)
-        return super().create(request, *args, **kwargs)
+        booking_data = request.data
+
+        # Get related objects (raise 404 if not found — optional)
+        bathhouse = Bathhouse.objects.get(id=booking_data.get("bathhouse"))
+        room = Room.objects.get(id=booking_data.get("room"))
+
+        # ---- Time handling (to Asia/Almaty) ----
+        start_time_raw = booking_data.get("start_time", "")
+        formatted_start_time = ""
+        if start_time_raw:
+            s = start_time_raw.strip()
+            # Allow both "Z" and "+00:00" style; if naive, assume UTC
+            if s.endswith("Z"):
+                s = s[:-1] + "+00:00"
+            try:
+                dt = datetime.fromisoformat(s)
+            except ValueError:
+                dt = None
+            if dt is not None:
+                if dt.tzinfo is None:
+                    # assume the backend sent UTC if naive
+                    dt = dt.replace(tzinfo=ZoneInfo("UTC"))
+                dt_almaty = dt.astimezone(ZoneInfo("Asia/Almaty"))
+                formatted_start_time = dt_almaty.strftime("%d.%m.%y %H:%M")
+
+        # ---- Extras formatting ----
+        extra_items = booking_data.get("extra_items_data") or []
+        extras_lines = (
+            "\n".join(
+                [
+                    f"• ID: <code>{html.escape(str(x.get('item', '')))}</code> — Кол-во: <b>{html.escape(str(x.get('quantity', '')))}</b>"
+                    for x in extra_items
+                ]
+            )
+            or "—"
+        )
+
+        # ---- Escape user-supplied fields ----
+        name = html.escape(booking_data.get("name", ""))
+        phone = html.escape(booking_data.get("phone", ""))
+        hours = html.escape(str(booking_data.get("hours", "")))
+        bath_name = html.escape(str(bathhouse.name))
+        room_type = "Сауна" if room.is_sauna else "Баня"
+
+        # ---- Nicely formatted “card” ----
+        text = (
+            f"🧖 <b>Новая бронь</b>\n"
+            f"<b>ID: </b> <code>{response.data.get('id')}</code> \n"
+            "——————————————\n"
+            f"👤 <b>Имя:</b> {name}\n"
+            f"📞 <b>Телефон:</b> {phone}\n"
+            f"🏛️ <b>Баня:</b> ID <code>{bathhouse.id}</code> — {bath_name}\n"
+            f"🚪 <b>Комната:</b> ID <code>{room.id}</code> — {room_type}, № {html.escape(str(room.room_number))}\n"
+            f"🕒 <b>Начало:</b> {formatted_start_time}\n"
+            f"⏳ <b>Часы:</b> {hours}\n"
+            f"🧺 <b>Доп. услуги:</b>\n{extras_lines}"
+        )
+
+        send_message(chat_type="notification", text=text)
+        return response
 
     @action(
         detail=False,

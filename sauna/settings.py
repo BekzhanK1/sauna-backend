@@ -12,6 +12,9 @@ https://docs.djangoproject.com/en/4.2/ref/settings/
 
 import os
 from pathlib import Path
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -26,7 +29,15 @@ SECRET_KEY = "django-insecure-n3jpm4_+)d$vwg8!+0168bcruea0(9s8qskh1r*25x^pxhd025
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['85.198.89.6', 'localhost', '127.0.0.1']
+ALLOWED_HOSTS = ["85.198.90.75", "localhost", "127.0.0.1"]
+
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+TELEGRAM_NOTIFICATION_CHAT_ID = os.getenv("TELEGRAM_NOTIFICATION_CHAT_ID")
+
+print(TELEGRAM_BOT_TOKEN)
+print(TELEGRAM_CHAT_ID)
+print(TELEGRAM_NOTIFICATION_CHAT_ID)
 
 
 MEDIA_URL = "/media/"

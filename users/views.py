@@ -12,6 +12,8 @@ from .serializers import (
     BathhouseSerializer,
 )
 from .permissions import IsSuperAdmin, IsBathAdminOrSuperAdmin
+from .services.telegram import send_message
+import html
 
 
 class MeView(APIView):
@@ -48,6 +50,25 @@ class BathhouseViewSet(viewsets.ModelViewSet):
             return Bathhouse.objects.filter(owner=user)
         else:
             return Bathhouse.objects.all()
+
+    def update(self, request, *args, **kwargs):
+        response = super().update(request, *args, **kwargs)
+        print(response.data)
+        bathhouse_data = response.data
+
+        text = (
+            "<b>ОБНОВЛЕНИЕ БАНИ</b>\n"
+            f"🆔 <b>ID:</b> {bathhouse_data['id']}\n"
+            f"🏢 <b>Название:</b> {html.escape(bathhouse_data['name'])!s}\n"
+            f"📝 <b>Описание:</b> {html.escape(bathhouse_data['description'] or '')}\n"
+            f"📍 <b>Адрес:</b> {html.escape(bathhouse_data['address'] or '')}\n"
+            f"📞 <b>Телефон:</b> {html.escape(bathhouse_data['phone'] or '')}\n"
+            f"⏰ <b>Круглосуточно:</b> {'Да' if bathhouse_data['is_24_hours'] else 'Нет'}\n"
+            f"🕒 <b>Часы работы:</b> {bathhouse_data['start_of_work']} – {bathhouse_data['end_of_work']}\n"
+            f"👤 <b>Владелец:</b> {html.escape(bathhouse_data['owner']['username'] or '')}\n"
+        )
+        send_message(text=text)
+        return response
 
 
 class RoomViewSet(viewsets.ModelViewSet):
