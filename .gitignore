@@ -5,3 +5,4 @@ venv/
 *.pyc
 media/
 .env
+celerybeat-schedule

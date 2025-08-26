@@ -1,6 +1,15 @@
 version: '3.9'
 
 services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
   web:
     build: .
     command: gunicorn sauna.wsgi:application --bind 0.0.0.0:8000
@@ -8,11 +17,48 @@ services:
       - .:/app
     ports:
       - "8000:8000"
-    # env_file:
-    #   - .env
+    environment:
+      # point Celery to the redis *service name*, never localhost
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+      # optional: set your timezone explicitly
+      DJANGO_TIME_ZONE: Asia/Almaty
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  worker:
+    build: .
+    command: celery -A sauna worker -l info
+    volumes:
+      - .:/app
+    environment:
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  beat:
+    build: .
+    command: celery -A sauna beat -l info
+    volumes:
+      - .:/app
+    environment:
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
 
   migrate:
     build: .
     command: python3 manage.py migrate
     volumes:
       - .:/app
+    depends_on:
+      redis:
+        condition: service_started
