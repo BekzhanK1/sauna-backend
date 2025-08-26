@@ -2,8 +2,8 @@ name: Deploy backend
 
 on:
   push:
-    branches: [ "main" ]          # deploy on push to main
-  workflow_dispatch:               # allow manual run
+    branches: [ "main" ]
+  workflow_dispatch:
 
 concurrency:
   group: deploy-backend
@@ -23,19 +23,39 @@ jobs:
           password: ${{ secrets.VPS_PASSWORD }}
           port: 22
           script_stop: true
-          # If first connection ever, skip known_hosts prompt:
-          # (uncomment next line if the action complains about host keys)
-          # proxy_command: "none"
           script: |
             set -euo pipefail
             cd ~/vparu-prod/sauna-backend
-            # stop old containers (ignore if none)
             docker compose down || true
-            # make sure we're on main and up to date
             git fetch --all
             git checkout main || git checkout -b main
             git pull origin main
-            # build & start
             docker compose up --build -d
-            # optional cleanup
-            docker system prune -f
+            docker system prune -f || true
+
+      # Always run this step (even if deploy failed), and report status
+      - name: Notify Telegram
+        if: ${{ always() }}
+        env:
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+          STATUS: ${{ job.status }}                              # success | failure | cancelled
+          REPO: ${{ github.repository }}
+          REF: ${{ github.ref_name }}
+          SHA: ${{ github.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ "$STATUS" = "success" ]; then
+            ICON="✅"; TITLE="Deploy succeeded"
+          elif [ "$STATUS" = "cancelled" ]; then
+            ICON="⚠️"; TITLE="Deploy cancelled"
+          else
+            ICON="❌"; TITLE="Deploy failed"
+          fi
+          SHORT_SHA="${SHA::7}"
+          TEXT="$ICON *$TITLE*\nRepo: \`$REPO\`\nBranch: \`$REF\`\nCommit: \`$SHORT_SHA\`\nRun: $RUN_URL"
+          curl -sS -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
+            -d chat_id="${TG_CHAT_ID}" \
+            -d text="$TEXT" \
+            -d parse_mode="Markdown" \
+            -d disable_web_page_preview=true
