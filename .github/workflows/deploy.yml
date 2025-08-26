@@ -90,13 +90,13 @@ jobs:
             IMG_BLOCK="<pre>${IMG_SUMMARY}</pre>"
           fi
 
-          TEXT="$ICON <b>$TITLE</b><br>
-                <b>Проект:</b> <code>$REPO</code><br>
-                <b>Ветка:</b> <code>$REF</code><br>
-                <b>Коммит:</b> <code>$SHORT_SHA</code><br>
-                <b>Длительность:</b> <code>$D_HMS</code><br>
-                <b>Образы Docker:</b><br>${IMG_BLOCK}<br>
-                <b>Логи:</b> <a href=\"$RUN_URL\">запуск GitHub Actions</a><br>
+          TEXT="$ICON <b>$TITLE</b>\n
+                <b>Проект:</b> <code>$REPO</code>\n
+                <b>Ветка:</b> <code>$REF</code>\n
+                <b>Коммит:</b> <code>$SHORT_SHA</code>\n
+                <b>Длительность:</b> <code>$D_HMS</code>\n
+                <b>Образы Docker:</b>\n${IMG_BLOCK}\n
+                <b>Логи:</b> <a href=\"$RUN_URL\">запуск GitHub Actions</a>\n
                 <i>Автоматизированное развертывание через GitHub Actions и Docker Compose завершено. Система уведомлений работает в штатном режиме.</i>"
 
           curl -sS -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
