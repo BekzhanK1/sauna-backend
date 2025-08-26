@@ -1,0 +1,41 @@
+name: Deploy backend
+
+on:
+  push:
+    branches: [ "main" ]          # deploy on push to main
+  workflow_dispatch:               # allow manual run
+
+concurrency:
+  group: deploy-backend
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          password: ${{ secrets.VPS_PASSWORD }}
+          port: 22
+          script_stop: true
+          # If first connection ever, skip known_hosts prompt:
+          # (uncomment next line if the action complains about host keys)
+          # proxy_command: "none"
+          script: |
+            set -euo pipefail
+            cd ~/vparu-prod/sauna-backend
+            # stop old containers (ignore if none)
+            docker compose down || true
+            # make sure we're on main and up to date
+            git fetch --all
+            git checkout main || git checkout -b main
+            git pull origin main
+            # build & start
+            docker compose up --build -d
+            # optional cleanup
+            docker system prune -f
