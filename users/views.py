@@ -51,6 +51,24 @@ class BathhouseViewSet(viewsets.ModelViewSet):
         else:
             return Bathhouse.objects.all()
 
+    def create(self, request, *args, **kwargs):
+        response = super().create(request, *args, **kwargs)
+        print(response.data)
+        bathhouse_data = response.data
+        text = (
+            "<b>НОВАЯ БАНЯ</b>\n"
+            f"🆔 <b>ID:</b> {bathhouse_data['id']}\n"
+            f"🏢 <b>Название:</b> {html.escape(bathhouse_data['name'])!s}\n"
+            f"📝 <b>Описание:</b> {html.escape(bathhouse_data['description'] or '')}\n"
+            f"📍 <b>Адрес:</b> {html.escape(bathhouse_data['address'] or '')}\n"
+            f"📞 <b>Телефон:</b> {html.escape(bathhouse_data['phone'] or '')}\n"
+            f"⏰ <b>Круглосуточно:</b> {'Да' if bathhouse_data['is_24_hours'] else 'Нет'}\n"
+            f"🕒 <b>Часы работы:</b> {bathhouse_data['start_of_work']} – {bathhouse_data['end_of_work']}\n"
+        )
+
+        send_message(text=text)
+        return response
+
     def update(self, request, *args, **kwargs):
         response = super().update(request, *args, **kwargs)
         print(response.data)
