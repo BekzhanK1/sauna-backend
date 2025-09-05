@@ -1,6 +1,21 @@
 version: '3.9'
 
 services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: sauna
+      POSTGRES_USER: sauna
+      POSTGRES_PASSWORD: sauna
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
   redis:
     image: redis:7-alpine
     restart: unless-stopped
@@ -23,7 +38,13 @@ services:
       CELERY_RESULT_BACKEND: redis://redis:6379/1
       # optional: set your timezone explicitly
       DJANGO_TIME_ZONE: Asia/Almaty
+      POSTGRES_HOST: db
+      POSTGRES_DB: sauna
+      POSTGRES_USER: sauna
+      POSTGRES_PASSWORD: sauna
     depends_on:
+      db:
+        condition: service_healthy
       redis:
         condition: service_healthy
     restart: unless-stopped
@@ -36,7 +57,13 @@ services:
     environment:
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/1
+      POSTGRES_HOST: db
+      POSTGRES_DB: sauna
+      POSTGRES_USER: sauna
+      POSTGRES_PASSWORD: sauna
     depends_on:
+      db:
+        condition: service_healthy
       redis:
         condition: service_healthy
     restart: unless-stopped
@@ -49,7 +76,13 @@ services:
     environment:
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/1
+      POSTGRES_HOST: db
+      POSTGRES_DB: sauna
+      POSTGRES_USER: sauna
+      POSTGRES_PASSWORD: sauna
     depends_on:
+      db:
+        condition: service_healthy
       redis:
         condition: service_healthy
     restart: unless-stopped
@@ -59,6 +92,13 @@ services:
     command: python3 manage.py migrate
     volumes:
       - .:/app
+    environment:
+      POSTGRES_HOST: db
+      POSTGRES_DB: sauna
+      POSTGRES_USER: sauna
+      POSTGRES_PASSWORD: sauna
     depends_on:
+      db:
+        condition: service_healthy
       redis:
         condition: service_started
