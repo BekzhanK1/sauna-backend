@@ -126,6 +126,9 @@ class BookingSerializer(serializers.ModelSerializer):
                 item=bathhouse_item, quantity=quantity, booking=instance
             )
 
+        # Calculate and save the final price
+        instance.final_price = instance.calculate_final_price()
+
         sms_code = generate_random_4_digit_number()
         print(sms_code)
         instance.sms_code = sms_code
@@ -153,12 +156,7 @@ class BookingSerializer(serializers.ModelSerializer):
         representation["room_full_price"] = str(
             instance.room.price_per_hour * instance.hours
         )
-        representation["final_price"] = str(
-            (instance.room.price_per_hour * instance.hours)
-            + sum(
-                extra_item.item.price * extra_item.quantity
-                for extra_item in instance.extra_items.all()
-            )
-        )
+        # Use the saved final price if available, otherwise calculate dynamically
+        representation["final_price"] = str(instance.get_final_price())
 
         return representation
