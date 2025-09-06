@@ -2,9 +2,10 @@ from django.utils import timezone
 from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from users.models import Bathhouse, Room
-from .models import Booking
+from .models import Booking, BonusAccount, BonusTransaction
 from .serializers import BookingSerializer
 from .utils import generate_random_4_digit_number
 from users.permissions import IsBathAdminOrSuperAdmin
@@ -69,7 +70,22 @@ class BookingViewSet(viewsets.ModelViewSet):
             serializer = self.get_serializer(bookings, many=True)
             return Response(serializer.data, status=status.HTTP_200_OK)
 
-        return super().list(request, *args, **kwargs)
+        # For authenticated users, optionally filter by bathhouse_id
+        queryset = self.get_queryset()
+        bathhouse_id = request.query_params.get("bathhouse_id")
+        
+        if bathhouse_id:
+            try:
+                bathhouse_id_int = int(bathhouse_id)
+                queryset = queryset.filter(bathhouse_id=bathhouse_id_int)
+            except (TypeError, ValueError):
+                return Response(
+                    {"error": "bathhouse_id must be an integer"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
     def create(self, request, *args, **kwargs):
         response = super().create(request, *args, **kwargs)
@@ -191,6 +207,85 @@ class BookingViewSet(viewsets.ModelViewSet):
             return Response(
                 {"error": "Sms code is incorrect"}, status=status.HTTP_400_BAD_REQUEST
             )
+
+
+class BonusBalanceView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request):
+        bathhouse_id = request.query_params.get("bathhouse_id")
+        phone = request.query_params.get("phone")
+
+        if not bathhouse_id or not phone:
+            return Response(
+                {"error": "bathhouse_id and phone are required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            bathhouse_id_int = int(bathhouse_id)
+        except (TypeError, ValueError):
+            return Response(
+                {"error": "bathhouse_id must be an integer"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        account = (
+            BonusAccount.objects.filter(bathhouse_id=bathhouse_id_int, phone=phone)
+            .only("id", "balance")
+            .first()
+        )
+
+        balance = str(account.balance) if account else "0.00"
+        return Response({"bathhouse_id": bathhouse_id_int, "phone": phone, "balance": balance})
+
+
+class BonusTransactionsView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request):
+        bathhouse_id = request.query_params.get("bathhouse_id")
+        phone = request.query_params.get("phone")
+
+        if not bathhouse_id or not phone:
+            return Response(
+                {"error": "bathhouse_id and phone are required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            bathhouse_id_int = int(bathhouse_id)
+        except (TypeError, ValueError):
+            return Response(
+                {"error": "bathhouse_id must be an integer"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        account = (
+            BonusAccount.objects.filter(bathhouse_id=bathhouse_id_int, phone=phone)
+            .only("id")
+            .first()
+        )
+
+        if not account:
+            return Response({"bathhouse_id": bathhouse_id_int, "phone": phone, "transactions": []})
+
+        txs = (
+            BonusTransaction.objects.filter(account=account)
+            .order_by("-id")
+            .values("type", "amount", "booking_id")
+        )
+
+        data = [
+            {
+                "type": tx["type"],
+                "amount": str(tx["amount"]),
+                "booking": tx["booking_id"],
+            }
+            for tx in txs
+        ]
+
+        return Response({"bathhouse_id": bathhouse_id_int, "phone": phone, "transactions": data})
 
     @action(
         detail=True,

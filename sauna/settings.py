@@ -13,8 +13,11 @@ https://docs.djangoproject.com/en/4.2/ref/settings/
 import os
 from pathlib import Path
 from dotenv import load_dotenv
+from celery.schedules import crontab
 
 load_dotenv()
+
+STAGE = os.getenv("STAGE", "DEV")
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -146,7 +149,7 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/4.2/howto/static-files/
 
 STATIC_URL = "/static/"
-STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles")
+STATIC_ROOT = os.path.join(BASE_DIR, "static")
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
@@ -165,3 +168,12 @@ CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
 # CELERY_TIMEZONE = TIME_ZONE
+
+# Run periodic tasks
+CELERY_BEAT_SCHEDULE = {
+    # Accrue bonuses for finished, confirmed bookings every 5 minutes
+    "accrue-finished-booking-bonuses": {
+        "task": "bookings.tasks.accrue_finished_booking_bonuses",
+        "schedule": 300.0,  # every 5 minutes
+    },
+}

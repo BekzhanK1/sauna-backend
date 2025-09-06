@@ -6,7 +6,7 @@ from django.conf import settings
 
 log = logging.getLogger(__name__)
 API_BASE = f"https://api.telegram.org/bot{settings.TELEGRAM_BOT_TOKEN}"
-
+STAGE = settings.STAGE
 
 class TelegramError(RuntimeError):
     pass
@@ -31,6 +31,8 @@ def send_message(
     """
     Synchronous helper for standard Django views.
     """
+    if STAGE == "DEV":
+        return
     _check_config()
     if chat_type == "default":
         cid = chat_id or settings.TELEGRAM_CHAT_ID

@@ -58,3 +58,73 @@ class Booking(models.Model):
 
     def __str__(self):
         return f"Booking by {self.name} at {self.bathhouse.name} from {self.start_time} to {self.start_time + timedelta(hours=self.hours)}"
+
+
+class BonusAccount(models.Model):
+    bathhouse = models.ForeignKey(
+        Bathhouse, on_delete=models.CASCADE, related_name="bonus_accounts"
+    )
+    phone = models.CharField(max_length=20)
+    balance = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ("bathhouse", "phone")
+
+    def __str__(self):
+        return f"{self.phone} @ {self.bathhouse.name}: {self.balance}"
+
+
+class BonusTransaction(models.Model):
+    ACCRUAL = "accrual"
+    REDEMPTION = "redemption"
+    TYPE_CHOICES = (
+        (ACCRUAL, "Accrual"),
+        (REDEMPTION, "Redemption"),
+    )
+
+    account = models.ForeignKey(
+        BonusAccount, on_delete=models.CASCADE, related_name="transactions"
+    )
+    booking = models.ForeignKey(
+        Booking, on_delete=models.SET_NULL, null=True, blank=True, related_name="bonus_transactions"
+    )
+    type = models.CharField(max_length=20, choices=TYPE_CHOICES)
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.type} {self.amount} for {self.account.phone} ({self.account.bathhouse_id})"
+
+
+def accrue_bonus_for_booking(booking: "Booking"):
+    """Accrue bonus based on bathhouse percentage and booking final price."""
+    percent = booking.bathhouse.bonus_percentage or Decimal("0.00")
+    if Decimal(percent) <= 0:
+        return None
+
+    final_price = Decimal(booking.get_final_price() or 0)
+    if final_price <= 0:
+        return None
+
+    amount = (final_price * Decimal(percent) / Decimal("100")).quantize(Decimal("0.01"))
+
+    account, _ = BonusAccount.objects.get_or_create(
+        bathhouse=booking.bathhouse, phone=booking.phone
+    )
+
+    # Prevent duplicate accruals for the same booking
+    if BonusTransaction.objects.filter(booking=booking, type=BonusTransaction.ACCRUAL).exists():
+        return None
+
+    account.balance = (account.balance + amount).quantize(Decimal("0.01"))
+    account.save(update_fields=["balance", "updated_at"])
+
+    tx = BonusTransaction.objects.create(
+        account=account,
+        booking=booking,
+        type=BonusTransaction.ACCRUAL,
+        amount=amount,
+    )
+    return tx

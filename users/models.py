@@ -32,6 +32,12 @@ class Bathhouse(models.Model):
     is_24_hours = models.BooleanField(default=False)
     start_of_work = models.TimeField(null=True, blank=True)
     end_of_work = models.TimeField(null=True, blank=True)
+    bonus_percentage = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=0.00,
+        help_text="Bonus accrual percent applied to booking final price (e.g., 5.00 for 5%)."
+    )
 
     def __str__(self):
         return f"{self.name} - {self.owner.username if self.owner else 'No Owner'}"
