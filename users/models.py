@@ -137,6 +137,23 @@ class Room(models.Model):
         unique_together = ("bathhouse", "room_number", "is_bathhouse", "is_sauna")
 
 
+class RoomPhoto(models.Model):
+    room = models.ForeignKey(
+        Room, on_delete=models.CASCADE, related_name="photos"
+    )
+    image = models.ImageField(upload_to="room_photos/")
+    caption = models.CharField(max_length=200, blank=True)
+    is_primary = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Photo for {self.room} - {self.caption or 'No caption'}"
+
+    class Meta:
+        ordering = ['is_primary', 'created_at']
+
+
 class MenuCategory(models.Model):
     name = models.CharField(max_length=100)
     bathhouse = models.ForeignKey(

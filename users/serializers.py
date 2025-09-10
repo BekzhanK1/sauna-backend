@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import ExtraItem, MenuCategory, Room, User, Bathhouse, BathhouseItem
+from .models import ExtraItem, MenuCategory, Room, RoomPhoto, User, Bathhouse, BathhouseItem
 
 
 class ExtraItemInputSerializer(serializers.Serializer):
@@ -7,7 +7,29 @@ class ExtraItemInputSerializer(serializers.Serializer):
     quantity = serializers.IntegerField(min_value=1)
 
 
+class RoomPhotoSerializer(serializers.ModelSerializer):
+    image_url = serializers.SerializerMethodField()
+    
+    def get_image_url(self, obj):
+        if obj.image:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.image.url)
+            return obj.image.url
+        return None
+    
+    class Meta:
+        model = RoomPhoto
+        fields = ['id', 'image', 'image_url', 'caption', 'is_primary', 'created_at', 'updated_at']
+
+
 class RoomSerializer(serializers.ModelSerializer):
+    photos = serializers.SerializerMethodField()
+    
+    def get_photos(self, obj):
+        photos = obj.photos.all()
+        return RoomPhotoSerializer(photos, many=True, context=self.context).data
+    
     class Meta:
         model = Room
         fields = "__all__"

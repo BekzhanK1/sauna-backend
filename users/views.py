@@ -1,13 +1,16 @@
-from rest_framework import viewsets, permissions
+from rest_framework import viewsets, permissions, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from .models import BathhouseItem, ExtraItem, MenuCategory, Room, User, Bathhouse
+from rest_framework.decorators import action
+from django.http import Http404
+from .models import BathhouseItem, ExtraItem, MenuCategory, Room, RoomPhoto, User, Bathhouse
 from .serializers import (
     BathhouseItemSerializer,
     ExtraItemSerializer,
     MenuCategorySerializer,
     RoomSerializer,
+    RoomPhotoSerializer,
     UserSerializer,
     BathhouseSerializer,
 )
@@ -116,6 +119,71 @@ class RoomViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(bathhouse_id=bathhouse_id)
 
         return queryset
+
+    @action(detail=True, methods=['post'], permission_classes=[IsBathAdminOrSuperAdmin])
+    def upload_photo(self, request, pk=None):
+        """Upload a photo for a room"""
+        try:
+            room = self.get_object()
+        except Room.DoesNotExist:
+            return Response({'error': 'Room not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        if 'image' not in request.FILES:
+            return Response({'error': 'No image provided'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Check if this should be the primary photo
+        is_primary = request.data.get('is_primary', False)
+        # Convert string to boolean if needed
+        if isinstance(is_primary, str):
+            is_primary = is_primary.lower() in ['true', '1', 'yes', 'on']
+        
+        # If setting as primary, unset other primary photos
+        if is_primary:
+            RoomPhoto.objects.filter(room=room, is_primary=True).update(is_primary=False)
+        
+        photo = RoomPhoto.objects.create(
+            room=room,
+            image=request.FILES['image'],
+            caption=request.data.get('caption', ''),
+            is_primary=is_primary
+        )
+        
+        serializer = RoomPhotoSerializer(photo, context={'request': request})
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['delete'], url_path='photos/(?P<photo_id>[^/.]+)')
+    def delete_photo(self, request, pk=None, photo_id=None):
+        """Delete a specific photo from a room"""
+        try:
+            room = self.get_object()
+            photo = RoomPhoto.objects.get(id=photo_id, room=room)
+            photo.delete()
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        except Room.DoesNotExist:
+            return Response({'error': 'Room not found'}, status=status.HTTP_404_NOT_FOUND)
+        except RoomPhoto.DoesNotExist:
+            return Response({'error': 'Photo not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    @action(detail=True, methods=['patch'], url_path='photos/(?P<photo_id>[^/.]+)/set-primary')
+    def set_primary_photo(self, request, pk=None, photo_id=None):
+        """Set a photo as the primary photo for a room"""
+        try:
+            room = self.get_object()
+            photo = RoomPhoto.objects.get(id=photo_id, room=room)
+            
+            # Unset other primary photos
+            RoomPhoto.objects.filter(room=room, is_primary=True).update(is_primary=False)
+            
+            # Set this photo as primary
+            photo.is_primary = True
+            photo.save()
+            
+            serializer = RoomPhotoSerializer(photo, context={'request': request})
+            return Response(serializer.data)
+        except Room.DoesNotExist:
+            return Response({'error': 'Room not found'}, status=status.HTTP_404_NOT_FOUND)
+        except RoomPhoto.DoesNotExist:
+            return Response({'error': 'Photo not found'}, status=status.HTTP_404_NOT_FOUND)
 
 
 class BathhouseItemViewSet(viewsets.ModelViewSet):
