@@ -143,7 +143,7 @@ class BookingViewSet(viewsets.ModelViewSet):
             with db_transaction.atomic():
                 booking.is_paid = True
                 booking.save(update_fields=["is_paid"])
-                accrue_bonus_for_booking(booking)
+                accrual_tx = accrue_bonus_for_booking(booking)
 
             existing_account = (
                 BonusAccount.objects.filter(bathhouse_id=bathhouse_id_int, phone=phone)
@@ -159,6 +159,7 @@ class BookingViewSet(viewsets.ModelViewSet):
                     "balance": balance_str,
                     "final_price": str(final_price),
                     "remaining_due": "0.00",
+                    "earned_bonus": str(accrual_tx.amount) if accrual_tx else "0.00",
                 },
                 status=status.HTTP_200_OK,
             )
@@ -188,7 +189,7 @@ class BookingViewSet(viewsets.ModelViewSet):
             # Mark as paid regardless of whether bonuses cover fully; rest is handled offline
             booking.is_paid = True
             booking.save(update_fields=["is_paid"])
-            accrue_bonus_for_booking(booking)
+            accrual_tx = accrue_bonus_for_booking(booking)
 
         return Response(
             {
@@ -198,6 +199,7 @@ class BookingViewSet(viewsets.ModelViewSet):
                 "balance": str(account.balance),
                 "final_price": str(final_price),
                 "remaining_due": "0.00",
+                "earned_bonus": str(accrual_tx.amount) if accrual_tx else "0.00",
             },
             status=status.HTTP_200_OK,
         )

@@ -157,6 +157,11 @@ class BookingSerializer(serializers.ModelSerializer):
             instance.room.price_per_hour * instance.hours
         )
         # Use the saved final price if available, otherwise calculate dynamically
-        representation["final_price"] = str(instance.get_final_price())
+        final_price = instance.get_final_price()
+        representation["final_price"] = str(final_price)
+        # Promotions breakdown, if set during calculation
+        promotions = getattr(instance, "_promotions_applied", None)
+        if promotions is not None:
+            representation["promotions_applied"] = promotions
 
         return representation

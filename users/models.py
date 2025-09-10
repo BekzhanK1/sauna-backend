@@ -2,6 +2,7 @@ from django.conf import settings
 from django.db import models
 from django.contrib.auth.models import AbstractUser
 from .managers import UserManager
+from django.db.models import JSONField
 
 
 class User(AbstractUser):
@@ -32,11 +33,77 @@ class Bathhouse(models.Model):
     is_24_hours = models.BooleanField(default=False)
     start_of_work = models.TimeField(null=True, blank=True)
     end_of_work = models.TimeField(null=True, blank=True)
-    bonus_percentage = models.DecimalField(
+    # Enable/disable toggles
+    bonus_accrual_enabled = models.BooleanField(
+        default=True,
+        help_text="Enable bonus accrual for this bathhouse"
+    )
+    happy_hours_enabled = models.BooleanField(
+        default=False,
+        help_text="Enable Happy Hours promotion"
+    )
+    birthday_discount_enabled = models.BooleanField(
+        default=False,
+        help_text="Enable Birthday discount promotion"
+    )
+    bonus_hour_enabled = models.BooleanField(
+        default=False,
+        help_text="Enable Bonus Hour promotion"
+    )
+    # Promotions configuration
+    # Happy Hours
+    happy_hours_start_time = models.TimeField(null=True, blank=True)
+    happy_hours_end_time = models.TimeField(null=True, blank=True)
+    happy_hours_discount_percentage = models.DecimalField(
         max_digits=5,
         decimal_places=2,
         default=0.00,
-        help_text="Bonus accrual percent applied to booking final price (e.g., 5.00 for 5%)."
+        help_text="Discount percent during Happy Hours (e.g., 30.00)."
+    )
+    happy_hours_days = JSONField(
+        default=list,
+        blank=True,
+        help_text="Array of weekdays when Happy Hours is valid, e.g., ['MONDAY','TUESDAY']."
+    )
+    # Birthday Discount
+    birthday_discount_percentage = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=0.00,
+        help_text="Discount percent if it is the customer's birthday (e.g., 10.00)."
+    )
+    # Bonus Hour (+1 hour) configuration
+    min_hours_for_bonus = models.PositiveIntegerField(
+        default=0,
+        help_text="Minimum booking hours required to activate Bonus Hour."
+    )
+    bonus_hour_days = JSONField(
+        default=list,
+        blank=True,
+        help_text="Array of weekdays when Bonus Hour is valid, e.g., ['MONDAY','TUESDAY']."
+    )
+    bonus_hours_awarded = models.PositiveIntegerField(
+        default=0,
+        help_text="Number of free hours awarded when Bonus Hour applies."
+    )
+    # Loyalty tiers (configurable per bathhouse)
+    bonus_threshold_amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0.00,
+        help_text="If final bill >= this amount, apply higher bonus percentage; otherwise lower."
+    )
+    lower_bonus_percentage = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=0.00,
+        help_text="Bonus percent for bills below the threshold."
+    )
+    higher_bonus_percentage = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=0.00,
+        help_text="Bonus percent for bills at or above the threshold."
     )
 
     def __str__(self):
