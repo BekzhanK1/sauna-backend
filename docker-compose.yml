@@ -8,6 +8,8 @@ services:
       POSTGRES_DB: sauna
       POSTGRES_USER: sauna
       POSTGRES_PASSWORD: sauna
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
     ports:
       - "5433:5432"
     healthcheck:
@@ -102,3 +104,5 @@ services:
         condition: service_healthy
       redis:
         condition: service_started
+volumes:
+  postgres_data:
