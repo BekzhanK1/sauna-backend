@@ -5,7 +5,8 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from users.models import Bathhouse, Room
-from .models import Booking, BonusAccount, BonusTransaction
+from django.db import transaction as db_transaction
+from .models import Booking, BonusAccount, BonusTransaction, accrue_bonus_for_booking
 from .serializers import BookingSerializer
 from .utils import generate_random_4_digit_number
 from users.permissions import IsBathAdminOrSuperAdmin
@@ -86,6 +87,120 @@ class BookingViewSet(viewsets.ModelViewSet):
         
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @action(
+        detail=True,
+        methods=["post"],
+        permission_classes=[IsBathAdminOrSuperAdmin],
+        url_path="process-payment",
+    )
+    def process_payment(self, request, pk=None):
+        """
+        Confirm booking payment and optionally redeem bonus balance.
+
+        Query params: bathhouse_id (int), phone (str)
+        Body JSON: { "amount": number }  # amount of bonuses to redeem; can be 0
+        """
+        booking = self.get_object()
+        bathhouse_id = request.query_params.get("bathhouse_id")
+        phone = request.query_params.get("phone")
+        amount = request.data.get("amount", 0)
+
+        if not bathhouse_id or not phone:
+            return Response(
+                {"error": "bathhouse_id and phone are required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            bathhouse_id_int = int(bathhouse_id)
+        except (TypeError, ValueError):
+            return Response(
+                {"error": "bathhouse_id must be an integer"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Basic checks
+        if booking.bathhouse_id != bathhouse_id_int:
+            return Response({"error": "Booking bathhouse mismatch"}, status=status.HTTP_400_BAD_REQUEST)
+        if booking.phone != phone:
+            return Response({"error": "Phone mismatch with booking"}, status=status.HTTP_400_BAD_REQUEST)
+        if not booking.confirmed:
+            return Response({"error": "Booking must be confirmed"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Amount parsing
+        try:
+            amount_dec = Decimal(str(amount)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        except Exception:
+            return Response({"error": "Invalid amount"}, status=status.HTTP_400_BAD_REQUEST)
+        if amount_dec < 0:
+            return Response({"error": "Amount must be >= 0"}, status=status.HTTP_400_BAD_REQUEST)
+
+        final_price = Decimal(str(booking.get_final_price() or 0)).quantize(Decimal("0.01"))
+
+        # amount == 0: no bonus usage, just mark as paid
+        if amount_dec == 0:
+            with db_transaction.atomic():
+                booking.is_paid = True
+                booking.save(update_fields=["is_paid"])
+                accrue_bonus_for_booking(booking)
+
+            existing_account = (
+                BonusAccount.objects.filter(bathhouse_id=bathhouse_id_int, phone=phone)
+                .only("balance")
+                .first()
+            )
+            balance_str = str(existing_account.balance) if existing_account else "0.00"
+            return Response(
+                {
+                    "booking_id": str(booking.id),
+                    "is_paid": booking.is_paid,
+                    "redeemed": "0.00",
+                    "balance": balance_str,
+                    "final_price": str(final_price),
+                    "remaining_due": "0.00",
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        # amount > 0: redeem from bonus account
+        account, _ = BonusAccount.objects.get_or_create(
+            bathhouse_id=bathhouse_id_int, phone=phone
+        )
+
+        if amount_dec > account.balance:
+            return Response({"error": "Insufficient bonus balance"}, status=status.HTTP_400_BAD_REQUEST)
+        if amount_dec > final_price:
+            return Response({"error": "Amount cannot exceed booking price"}, status=status.HTTP_400_BAD_REQUEST)
+
+        with db_transaction.atomic():
+            new_balance = (account.balance - amount_dec).quantize(Decimal("0.01"))
+            account.balance = new_balance
+            account.save(update_fields=["balance", "updated_at"])
+
+            BonusTransaction.objects.create(
+                account=account,
+                booking=booking,
+                type=BonusTransaction.REDEMPTION,
+                amount=amount_dec,
+            )
+
+            # Mark as paid regardless of whether bonuses cover fully; rest is handled offline
+            booking.is_paid = True
+            booking.save(update_fields=["is_paid"])
+            accrue_bonus_for_booking(booking)
+
+        return Response(
+            {
+                "booking_id": str(booking.id),
+                "is_paid": booking.is_paid,
+                "redeemed": str(amount_dec),
+                "balance": str(account.balance),
+                "final_price": str(final_price),
+                "remaining_due": "0.00",
+            },
+            status=status.HTTP_200_OK,
+        )
 
     def create(self, request, *args, **kwargs):
         response = super().create(request, *args, **kwargs)
@@ -208,6 +323,54 @@ class BookingViewSet(viewsets.ModelViewSet):
                 {"error": "Sms code is incorrect"}, status=status.HTTP_400_BAD_REQUEST
             )
 
+    @action(
+        detail=True,
+        methods=["get"],
+        permission_classes=[permissions.AllowAny],
+        url_path="request-cancel-booking-sms",
+    )
+    def request_cancel_booking_sms(self, request, pk=None):
+        booking = self.get_object()
+        if not booking.confirmed:
+            return Response(
+                {"error": "Booking is not confirmed, cannot cancel"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        sms_code = generate_random_4_digit_number()
+        booking.sms_code = sms_code
+        booking.save()
+
+        print(sms_code)
+        return Response(
+            {"message": "Cancellation SMS sent successfully"}, status=status.HTTP_200_OK
+        )
+
+    @action(
+        detail=True,
+        methods=["post"],
+        permission_classes=[permissions.AllowAny],
+        url_path="cancel-booking-sms",
+    )
+    def cancel_booking_sms(self, request, pk=None):
+        booking = self.get_object()
+        sms_code = request.query_params.get("sms_code")
+        if not sms_code:
+            return Response(
+                {"error": "You have to enter sms code to cancel booking"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if sms_code == booking.sms_code:
+            booking.delete()
+            return Response(
+                {"message": "Booking cancelled successfully"}, status=status.HTTP_200_OK
+            )
+        else:
+            return Response(
+                {"error": "Sms code is incorrect"}, status=status.HTTP_400_BAD_REQUEST
+            )
+
 
 class BonusBalanceView(APIView):
     permission_classes = [permissions.AllowAny]
@@ -273,7 +436,7 @@ class BonusTransactionsView(APIView):
         txs = (
             BonusTransaction.objects.filter(account=account)
             .order_by("-id")
-            .values("type", "amount", "booking_id")
+            .values("type", "amount", "booking_id", "created_at")
         )
 
         data = [
@@ -281,59 +444,11 @@ class BonusTransactionsView(APIView):
                 "type": tx["type"],
                 "amount": str(tx["amount"]),
                 "booking": tx["booking_id"],
+                "created_at": tx["created_at"],
             }
             for tx in txs
         ]
 
         return Response({"bathhouse_id": bathhouse_id_int, "phone": phone, "transactions": data})
 
-    @action(
-        detail=True,
-        methods=["get"],
-        permission_classes=[permissions.AllowAny],
-        url_path="request-cancel-booking-sms",
-    )
-    def request_cancel_booking_sms(self, request, pk=None):
-        booking = self.get_object()
-        if not booking.confirmed:
-            return Response(
-                {"error": "Booking is not confirmed, cannot cancel"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        sms_code = generate_random_4_digit_number()
-        booking.sms_code = sms_code
-        booking.save()
-
-        print(sms_code)
-        # Here you would typically send an SMS with a cancellation code
-        # For simplicity, we will just return a success message
-        return Response(
-            {"message": "Cancellation SMS sent successfully"}, status=status.HTTP_200_OK
-        )
-
-    @action(
-        detail=True,
-        methods=["post"],
-        permission_classes=[permissions.AllowAny],
-        url_path="cancel-booking-sms",
-    )
-    def cancel_booking_sms(self, request, pk=None):
-        print(pk)
-        booking = self.get_object()
-        sms_code = request.query_params.get("sms_code")
-        if not sms_code:
-            return Response(
-                {"error": "You have to enter sms code to cancel booking"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        if sms_code == booking.sms_code:
-            booking.delete()
-            return Response(
-                {"message": "Booking cancelled successfully"}, status=status.HTTP_200_OK
-            )
-        else:
-            return Response(
-                {"error": "Sms code is incorrect"}, status=status.HTTP_400_BAD_REQUEST
-            )
+    # Booking-related actions do not belong in this APIView.

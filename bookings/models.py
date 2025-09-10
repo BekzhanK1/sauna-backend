@@ -22,6 +22,7 @@ class Booking(models.Model):
     # TODO: For testing purposes, this should be set to False in production
     confirmed = models.BooleanField(default=True)
     sms_code = models.CharField(max_length=10, blank=True, null=True)
+    is_paid = models.BooleanField(default=False, help_text="Whether the booking has been paid")
     created_at = models.DateTimeField(auto_now_add=True)
     final_price = models.DecimalField(
         max_digits=10, 
